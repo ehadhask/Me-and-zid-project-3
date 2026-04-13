@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Revolutionary War Chronicles</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #1a1a1a; 
+            /* Prevent default touch actions like pull-to-refresh or scrolling */
+            touch-action: none; 
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #ui-layer { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            pointer-events: none; 
+            z-index: 10; 
+            touch-action: none;
+        }
+        .interactive { pointer-events: auto; }
+        
+        .timeline-container {
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            gap: 2rem;
+            padding: 2rem;
+            width: 100%;
+            scrollbar-width: thin;
+            scrollbar-color: #ca8a04 #1a1a1a;
+            /* Allow scrolling only in the menu timeline */
+            touch-action: pan-x; 
+        }
+        .timeline-container::-webkit-scrollbar { height: 8px; }
+        .timeline-container::-webkit-scrollbar-thumb { background: #ca8a04; border-radius: 10px; }
+
+        .game-card { 
+            flex: 0 0 300px; 
+            scroll-snap-align: center;
+            transition: transform 0.3s ease, background-color 0.3s ease; 
+            cursor: pointer; 
+        }
+        .game-card:hover { transform: translateY(-10px); background-color: #1f2937; }
+        
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; 
+            width: 30px; height: 30px; 
+            transform: translate(-50%, -50%); 
+            pointer-events: none; display: none;
+            z-index: 20;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white;
+        }
+        #crosshair::before { width: 100%; height: 2px; top: 14px; left: 0; }
+        #crosshair::after { height: 100%; width: 2px; left: 14px; top: 0; }
+
+        #joystick-container {
+            position: absolute; bottom: 40px; left: 40px;
+            width: 120px; height: 120px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+            display: none; touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute; top: 50%; left: 50%;
+            width: 50px; height: 50px;
+            background: white; border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        #fire-btn {
+            position: absolute; bottom: 60px; right: 40px;
+            width: 80px; height: 80px;
+            background: rgba(255,0,0,0.6);
+            border-radius: 50%; border: 4px solid white;
+            display: none; justify-content: center; align-items: center;
+            color: white; font-weight: bold; font-size: 1.2rem;
+            user-select: none;
+            box-shadow: 0 0 15px rgba(255,0,0,0.3);
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        canvas { display: block; touch-action: none; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="menu" class="interactive flex flex-col items-center justify-center w-full h-full bg-black bg-opacity-80 text-white overflow-hidden">
+            <h1 class="text-4xl md:text-5xl font-bold mt-8 mb-4 text-yellow-600 text-center uppercase tracking-widest">Revolutionary War Chronicles</h1>
+            <p class="text-gray-400 mb-8 text-center px-4">Scroll the timeline and choose your mission</p>
+            
+            <div class="relative w-full overflow-hidden flex items-center">
+                <div class="timeline-container">
+                    <div onclick="startGame('massacre')" class="game-card bg-gray-800 border-b-8 border-red-700 rounded-lg p-6 flex flex-col items-center shadow-2xl">
+                        <span class="text-3xl font-bold text-red-500 mb-2">1770</span>
+                        <h2 class="text-xl font-bold mb-4">Boston Massacre</h2>
+                        <p class="text-sm text-gray-300 text-center mb-4">Walk the snowy streets of Boston. Help calm the crowd and maintain order.</p>
+                        <button class="mt-auto bg-red-700 hover:bg-red-600 px-6 py-2 rounded font-bold transition-colors">START MISSION</button>
+                    </div>
+
+                    <div onclick="startGame('teaparty')" class="game-card bg-gray-800 border-b-8 border-yellow-800 rounded-lg p-6 flex flex-col items-center shadow-2xl">
+                        <span class="text-3xl font-bold text-yellow-500 mb-2">1773</span>
+                        <h2 class="text-xl font-bold mb-4">Boston Tea Party</h2>
+                        <p class="text-sm text-gray-300 text-center mb-4">Knock the crates into the harbor. You only have 3 shots to sink them all!</p>
+                        <button class="mt-auto bg-yellow-700 hover:bg-yellow-600 px-6 py-2 rounded font-bold transition-colors">START MISSION</button>
+                    </div>
+
+                    <div onclick="startGame('lexington')" class="game-card bg-gray-800 border-b-8 border-blue-700 rounded-lg p-6 flex flex-col items-center shadow-2xl">
+                        <span class="text-3xl font-bold text-blue-500 mb-2">1775</span>
+                        <h2 class="text-xl font-bold mb-4">Battle of Lexington</h2>
+                        <p class="text-sm text-gray-300 text-center mb-4">Protect the town and ensure everyone stays safe from the incoming march.</p>
+                        <button class="mt-auto bg-blue-700 hover:bg-blue-600 px-6 py-2 rounded font-bold transition-colors">START MISSION</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="hud" class="hidden w-full p-4 flex justify-between text-white font-bold text-xl drop-shadow-md">
+            <div id="stats">Goal: 0 / 6</div>
+            <div id="ammo">3 SHOTS LEFT</div>
+            <button onclick="backToMenu()" class="interactive bg-white text-black px-4 py-1 rounded text-sm hover:bg-gray-200">EXIT</button>
+        </div>
+
+        <div id="joystick-container" class="interactive">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="fire-btn" class="interactive">FIRE</div>
+
+        <div id="end-screen" class="hidden interactive flex flex-col items-center justify-center w-full h-full bg-black bg-opacity-95 text-white">
+            <h2 id="end-title" class="text-5xl font-bold mb-4">MISSION OVER</h2>
+            <p id="end-msg" class="text-xl mb-8 text-center px-4 max-w-lg"></p>
+            <button onclick="backToMenu()" class="bg-yellow-600 hover:bg-yellow-500 px-8 py-3 rounded-lg font-bold transition-transform active:scale-95">RETURN TO TIMELINE</button>
+        </div>
+
+        <div id="crosshair"></div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, gun;
+        let currentGame = null;
+        let objects = [];
+        let raycaster = new THREE.Raycaster();
+        let stats = { score: 0, ammo: 0, target: 0 };
+        let isGameOver = false;
+
+        let pitch = 0, yaw = 0;
+        const sensitivity = 0.003;
+
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let joystickActive = false, joystickDir = { x: 0, y: 0 };
+        let activeTouches = {};
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // Prevent context menu to avoid interruptions on long press
+            window.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Improved Touch Logic with preventDefault to stop scrolling
+            document.addEventListener('touchstart', (e) => {
+                if (!currentGame || isGameOver) return;
+                
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    // Any touch on right half of screen is for aiming (unless it's the fire button)
+                    if (touch.clientX > window.innerWidth / 2) {
+                        if (touch.target.id !== 'fire-btn') {
+                           activeTouches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+                        }
+                    }
+                }
+                // Stop browser from scrolling
+                if (e.target.closest('.interactive') === null) {
+                    e.preventDefault();
+                }
+            }, {passive: false});
+
+            document.addEventListener('touchmove', (e) => {
+                if (!currentGame || isGameOver) return;
+                
+                // Prevent scrolling/pull-to-refresh
+                e.preventDefault();
+
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const touch = e.changedTouches[i];
+                    if (activeTouches[touch.identifier]) {
+                        const prev = activeTouches[touch.identifier];
+                        const dx = touch.clientX - prev.x;
+                        const dy = touch.clientY - prev.y;
+                        
+                        yaw -= dx * sensitivity * 1.5;
+                        pitch -= dy * sensitivity * 1.5;
+                        pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch));
+                        
+                        activeTouches[touch.identifier] = { x: touch.clientX, y: touch.clientY };
+                    }
+                }
+            }, {passive: false});
+
+            document.addEventListener('touchend', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    delete activeTouches[e.changedTouches[i].identifier];
+                }
+            });
+
+            // Keyboard input
+            window.addEventListener('keydown', (e) => {
+                switch(e.code) {
+                    case 'KeyW': moveForward = true; break;
+                    case 'KeyS': moveBackward = true; break;
+                    case 'KeyA': moveLeft = true; break;
+                    case 'KeyD': moveRight = true; break;
+                    case 'Space': fire(); break;
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                switch(e.code) {
+                    case 'KeyW': moveForward = false; break;
+                    case 'KeyS': moveBackward = false; break;
+                    case 'KeyA': moveLeft = false; break;
+                    case 'KeyD': moveRight = false; break;
+                }
+            });
+            
+            // Explicit Fire Button Handling
+            const fireBtn = document.getElementById('fire-btn');
+            fireBtn.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                e.stopPropagation();
+                if(currentGame && !isGameOver) fire(); 
+            }, {passive: false});
+
+            // Joystick setup
+            const joyContainer = document.getElementById('joystick-container');
+            const joyKnob = document.getElementById('joystick-knob');
+            joyContainer.addEventListener('touchstart', (e) => { 
+                joystickActive = true; 
+                e.preventDefault(); 
+            }, {passive: false});
+            
+            joyContainer.addEventListener('touchmove', (e) => {
+                if(!joystickActive) return;
+                e.preventDefault();
+                const rect = joyContainer.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const touch = Array.from(e.touches).find(t => t.clientX < window.innerWidth / 2);
+                if(touch) {
+                    let dx = touch.clientX - centerX;
+                    let dy = touch.clientY - centerY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const maxDist = rect.width / 2;
+                    if(dist > maxDist) { dx *= maxDist / dist; dy *= maxDist / dist; }
+                    joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                    joystickDir = { x: dx / maxDist, y: dy / maxDist };
+                }
+            }, {passive: false});
+            
+            joyContainer.addEventListener('touchend', () => {
+                joystickActive = false;
+                joystickDir = { x: 0, y: 0 };
+                joyKnob.style.transform = `translate(-50%, -50%)`;
+            });
+
+            animate();
+        }
+
+        function createGun() {
+            if(gun) camera.remove(gun);
+            const gunGroup = new THREE.Group();
+            const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 1.2), new THREE.MeshStandardMaterial({color: 0x3d2b1f}));
+            gunGroup.add(stock);
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 8), new THREE.MeshStandardMaterial({color: 0x222222}));
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.z = -0.6;
+            barrel.position.y = 0.05;
+            gunGroup.add(barrel);
+            gunGroup.position.set(0.35, -0.4, -0.6);
+            camera.add(gunGroup);
+            gun = gunGroup;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function backToMenu() {
+            document.getElementById('menu').style.display = 'flex';
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('crosshair').style.display = 'none';
+            document.getElementById('joystick-container').style.display = 'none';
+            document.getElementById('fire-btn').style.display = 'none';
+            currentGame = null;
+            clearScene();
+        }
+
+        function startGame(type) {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('hud').classList.remove('hidden');
+            document.getElementById('crosshair').style.display = 'block';
+            document.getElementById('joystick-container').style.display = 'block';
+            document.getElementById('fire-btn').style.display = 'flex';
+            
+            currentGame = type;
+            isGameOver = false;
+            pitch = 0; yaw = 0;
+            clearScene();
+            createGun();
+            scene.add(camera);
+            
+            if(type === 'massacre') setupMassacre();
+            else if(type === 'teaparty') setupTeaParty();
+            else if(type === 'lexington') setupLexington();
+        }
+
+        function clearScene() {
+            while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+            objects = [];
+        }
+
+        function createGround(color) {
+            const geometry = new THREE.PlaneGeometry(300, 300);
+            const material = new THREE.MeshStandardMaterial({ color: color });
+            const ground = new THREE.Mesh(geometry, material);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+            sun.position.set(20, 40, 20);
+            sun.castShadow = true;
+            scene.add(sun);
+            return ground;
+        }
+
+        function setupMassacre() {
+            scene.background = new THREE.Color(0x222233);
+            createGround(0xeaeaea);
+            camera.position.set(0, 2, 15);
+            stats = { score: 0, ammo: Infinity, target: 6 };
+            updateHUD("Agitators Calmed: 0 / 6", "MUSKET READY");
+            for(let i = 0; i < 30; i++) {
+                const rioter = createHuman(Math.random() * 40 - 20, 0, Math.random() * 40 - 35, 0x444444);
+                rioter.userData = { type: 'rioter', hit: false };
+                objects.push(rioter);
+            }
+        }
+
+        function setupTeaParty() {
+            scene.background = new THREE.Color(0x112244);
+            createGround(0x001133); 
+            
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(15, 2, 40), new THREE.MeshStandardMaterial({color: 0x3d2b1f}));
+            deck.position.set(0, 1, 0);
+            deck.receiveShadow = true;
+            scene.add(deck);
+            
+            camera.position.set(0, 5, 20);
+            stats = { score: 0, ammo: 3, target: 21 }; 
+            updateHUD(`Crates Sunk: 0 / 21`, "Shots Left: 3");
+
+            const size = 1.1;
+            const rows = 6;
+            
+            for (let r = 0; r < rows; r++) {
+                const cratesInRow = rows - r;
+                for (let c = 0; c < cratesInRow; c++) {
+                    const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), new THREE.MeshStandardMaterial({ color: 0x5d4037 }));
+                    const xPos = (c * size) - ((cratesInRow - 1) * size / 2);
+                    const yPos = (r * size) + 2.5; 
+                    const zPos = -10;
+
+                    crate.position.set(xPos, yPos, zPos);
+                    crate.castShadow = true;
+                    crate.userData = { 
+                        type: 'crate', 
+                        fallen: false, 
+                        velocity: new THREE.Vector3(), 
+                        size: size
+                    };
+                    scene.add(crate);
+                    objects.push(crate);
+                }
+            }
+        }
+
+        function setupLexington() {
+            scene.background = new THREE.Color(0x87ceeb);
+            createGround(0x2d5a27);
+            camera.position.set(0, 2, 20);
+            stats = { score: 0, ammo: 40, target: 10 };
+            updateHUD("Line Protected: 0 / 10", "Hold the Line");
+            for(let i=0; i<45; i++) {
+                const isRed = Math.random() > 0.4;
+                const person = createHuman(Math.random()*60-30, 0, -40 - Math.random()*40, isRed ? 0xb71c1c : 0x2e7d32);
+                person.userData = { type: isRed ? 'enemy' : 'civilian', hit: false, speed: 0.05 + Math.random() * 0.06 };
+                objects.push(person);
+            }
+        }
+
+        function createHuman(x, y, z, color) {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.3, 8), new THREE.MeshStandardMaterial({color: color}));
+            body.position.y = 0.85;
+            group.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.28), new THREE.MeshStandardMaterial({color: 0xffdbac}));
+            head.position.y = 1.7;
+            group.add(head);
+            group.position.set(x, y, z);
+            group.castShadow = true;
+            scene.add(group);
+            return group;
+        }
+
+        function updateHUD(s1, s2) {
+            document.getElementById('stats').innerText = s1;
+            document.getElementById('ammo').innerText = s2;
+        }
+
+        function fire() {
+            if(isGameOver || !currentGame) return;
+            
+            if(currentGame === 'teaparty') {
+                if(stats.ammo <= 0) return;
+                stats.ammo--;
+            }
+
+            if(gun) {
+                gun.position.z += 0.15;
+                setTimeout(() => { if(gun) gun.position.z -= 0.15; }, 80);
+            }
+            
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            
+            if(currentGame === 'teaparty') {
+                if(intersects.length > 0) {
+                    let hitPoint = intersects[0].point;
+                    const blastRadius = 6.0; 
+                    objects.forEach(o => {
+                        if(o.userData.type === 'crate') {
+                            const dist = o.position.distanceTo(hitPoint);
+                            if(dist < blastRadius) {
+                                const forceDir = o.position.clone().sub(hitPoint).normalize();
+                                forceDir.y += 0.5; 
+                                const power = (1 - dist / blastRadius) * 2.8;
+                                o.userData.velocity.add(forceDir.multiplyScalar(power));
+                            }
+                        }
+                    });
+                }
+                updateHUD(`Crates Sunk: ${stats.score} / ${stats.target}`, `Shots Left: ${stats.ammo}`);
+            } else if(currentGame === 'massacre') {
+                if(intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while(obj.parent && obj.parent.type !== 'Scene') obj = obj.parent;
+                    if(obj.userData.type === 'rioter' && !obj.userData.hit) {
+                        obj.userData.hit = true; obj.rotation.x = -Math.PI / 2;
+                        stats.score++; updateHUD(`Agitators Calmed: ${stats.score} / 6`, "RELOADING...");
+                        if(stats.score >= 6) endGame(true, "The crowd disperses peacefully.");
+                    }
+                }
+            } else if(currentGame === 'lexington') {
+                if(intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while(obj.parent && obj.parent.type !== 'Scene') obj = obj.parent;
+                    if(!obj.userData.hit) {
+                        if(obj.userData.type === 'enemy') {
+                            obj.userData.hit = true; obj.rotation.z = Math.PI / 2;
+                            stats.score++; updateHUD(`Line Protected: ${stats.score} / 10`, "NICE SHOT");
+                            if(stats.score >= 10) endGame(true, "The march has stopped!");
+                        } else if(obj.userData.type === 'civilian') { endGame(false, "You hit someone you were protecting!"); }
+                    }
+                }
+            }
+        }
+
+        function endGame(win, msg) {
+            isGameOver = true;
+            document.getElementById('end-screen').classList.remove('hidden');
+            document.getElementById('end-title').innerText = win ? "MISSION SUCCESS" : "MISSION FAILED";
+            document.getElementById('end-msg').innerText = msg;
+            document.getElementById('crosshair').style.display = 'none';
+        }
+
+        function resolveCrateCollisions() {
+            const crates = objects.filter(o => o.userData.type === 'crate');
+            const minDist = 1.1; 
+            const deckHeight = 2.0;
+
+            for(let i = 0; i < crates.length; i++) {
+                const c1 = crates[i];
+                const isOverDeck = (c1.position.x > -7.5 && c1.position.x < 7.5 && c1.position.z > -20 && c1.position.z < 20);
+                if (isOverDeck && c1.position.y < deckHeight + 0.5) {
+                    c1.position.y = deckHeight + 0.5;
+                    c1.userData.velocity.y = Math.abs(c1.userData.velocity.y) * 0.1; 
+                    c1.userData.velocity.x *= 0.9; 
+                    c1.userData.velocity.z *= 0.9;
+                }
+                for(let j = i + 1; j < crates.length; j++) {
+                    const c2 = crates[j];
+                    const diff = c1.position.clone().sub(c2.position);
+                    const dist = diff.length();
+                    if(dist < minDist && dist > 0) {
+                        const overlap = minDist - dist;
+                        const pushDir = diff.normalize();
+                        const pushVec = pushDir.multiplyScalar(overlap * 0.5);
+                        c1.position.add(pushVec);
+                        c2.position.sub(pushVec);
+                        const vDiff = c1.userData.velocity.clone().sub(c2.userData.velocity);
+                        const impulse = vDiff.dot(pushDir);
+                        if(impulse < 0) {
+                            const force = pushDir.multiplyScalar(impulse * 0.5);
+                            c1.userData.velocity.sub(force);
+                            c2.userData.velocity.add(force);
+                        }
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(!isGameOver && currentGame) {
+                camera.rotation.order = 'YXZ';
+                camera.rotation.y = yaw;
+                camera.rotation.x = pitch;
+                
+                const moveSpeed = 0.07; 
+                const dir = new THREE.Vector3();
+                if(moveForward) dir.z -= 1; if(moveBackward) dir.z += 1;
+                if(moveLeft) dir.x -= 1; if(moveRight) dir.x += 1;
+                if(joystickActive) { dir.x = joystickDir.x; dir.z = joystickDir.y; }
+                if(dir.length() > 0) {
+                    dir.normalize().applyEuler(new THREE.Euler(0, yaw, 0));
+                    camera.position.addScaledVector(dir, moveSpeed);
+                }
+                
+                if(currentGame === 'teaparty') {
+                    if(camera.position.x > -7.5 && camera.position.x < 7.5 && camera.position.z > -20 && camera.position.z < 20) {
+                        camera.position.y = Math.max(camera.position.y, 3.5);
+                    }
+                    resolveCrateCollisions();
+                    objects.forEach(o => {
+                        if(o.userData.type === 'crate') {
+                            o.userData.velocity.y -= 0.035; 
+                            o.position.add(o.userData.velocity);
+                            o.userData.velocity.multiplyScalar(0.97); 
+                            const isOverDeck = (o.position.x > -7.5 && o.position.x < 7.5 && o.position.z > -20 && o.position.z < 20);
+                            if (!isOverDeck && o.position.y < 0.5 && !o.userData.fallen) {
+                                o.userData.fallen = true;
+                                stats.score++;
+                                updateHUD(`Crates Sunk: ${stats.score} / ${stats.target}`, `Shots Left: ${stats.ammo}`);
+                                if(stats.score >= stats.target) endGame(true, "All tea is overboard!");
+                            }
+                            if(o.position.y < -15) scene.remove(o);
+                        }
+                    });
+                    if(stats.ammo === 0 && stats.score < stats.target && !isGameOver) {
+                        const moving = objects.some(o => o.userData.type === 'crate' && o.userData.velocity.length() > 0.05);
+                        if(!moving) setTimeout(() => { if(!isGameOver && stats.score < stats.target) endGame(false, "The King's tea remains!"); }, 3000);
+                    }
+                } else if(currentGame === 'lexington') {
+                    objects.forEach(o => {
+                        if(!o.userData.hit) {
+                            o.position.z += o.userData.speed;
+                            if(o.position.z > camera.position.z + 5) {
+                                if(o.userData.type === 'enemy') endGame(false, "The line was broken!");
+                                else o.position.z = -100;
+                            }
+                        }
+                    });
+                }
+            }
+            renderer.render(scene, camera);
+        }
+        window.onload = init;
+    </script>
+</body>
+</html>
